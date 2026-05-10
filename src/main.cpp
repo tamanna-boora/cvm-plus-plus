@@ -99,66 +99,83 @@ static int runFile(const std::string& path, bool debug) {
 }
 
 // ── REPL ──────────────────────────────────────────────────────────────────────
-static void printBanner() {
-    std::cout <<
-        "  ____   __   __ __  __     _     _\n"
-        " / ___| \\ \\ / /|  \\/  |_  _| |_  | |_\n"
-        "| |      \\ V / | |\\/| | || |  _+ |  _|\n"
-        "|  ___    | |  | |  | | || | |_  | |_\n"
-        " \\____|   |_|  |_|  |_|\\__/ \\__|  \\__|\n"
-        "\n"
-        " CVM++ v1.0  —  Stack-based VM & Compiler\n"
-        " Commands: exit | debug | ;; (force exec)\n"
-        " Statements auto-execute on ';' or '}'\n\n";
-}
+static void runREPL() {
+    std::cout << R"(
+ ██████╗██╗   ██╗███╗   ███╗  ██╗  ██╗
+██╔════╝██║   ██║████╗ ████║  ██║  ██║
+██║     ██║   ██║██╔████╔██║  ███████║
+██║     ╚██╗ ██╔╝██║╚██╔╝██║  ╚════██║
+╚██████╗ ╚████╔╝ ██║ ╚═╝ ██║       ██║
+ ╚═════╝  ╚═══╝  ╚═╝     ╚═╝       ╚═╝
+)";
+    std::cout << "  CVM++ REPL v1.0\n";
+    std::cout << "  Commands: exit | debug | clear | ;; (force run)\n\n";
 
-static void replLoop() {
-    printBanner();
-    std::string buffer;
-    bool debug = false;
-
-    auto execBuffer = [&]() {
-        if (buffer.empty()) return;
-        try {
-            runSource(buffer, debug);
-        } catch (const std::exception& e) {
-            std::cerr << "Error: " << e.what() << "\n";
-        }
-        buffer.clear();
-    };
+    bool        debug   = false;
+    std::string line;
+    std::string session;  // ALL committed source — gives persistent variables
+    std::string pending;  // lines typed since last successful run
 
     while (true) {
-        std::cout << (buffer.empty() ? "cvm> " : "  .. ");
+        std::cout << (pending.empty() ? "cvm> " : "...  ");
         std::cout.flush();
-        std::string line;
-        if (!std::getline(std::cin, line)) break;
 
-        // meta-commands
-        if (line == "exit") break;
+        if (!std::getline(std::cin, line)) break;  // EOF (Ctrl+D / Ctrl+Z)
+
+        // ── built-in commands ─────────────────────────────────────────────
+        if (line == "exit" || line == "quit") break;
+
         if (line == "debug") {
             debug = !debug;
-            std::cout << "Debug mode " << (debug ? "ON" : "OFF") << "\n";
+            std::cout << "  [debug " << (debug ? "ON" : "OFF") << "]\n";
             continue;
         }
-        if (line == ";;") { execBuffer(); continue; }
 
-        buffer += line + "\n";
+        if (line == "clear") {
+            session.clear();
+            pending.clear();
+            std::cout << "  [session cleared]\n";
+            continue;
+        }
 
-        // auto-execute heuristic: last non-space char is ';' or '}'
-        std::string trimmed = line;
-        size_t last = trimmed.find_last_not_of(" \t\r\n");
-        if (last != std::string::npos) {
-            char ch = trimmed[last];
-            if (ch == ';' || ch == '}') execBuffer();
+        // ── accumulate input ──────────────────────────────────────────────
+        pending += line + "\n";
+
+        // Determine last non-whitespace character
+        char last = '\0';
+        for (char c : line) if (!std::isspace(c)) last = c;
+
+        bool forceRun = (line == ";;");
+        bool autoRun  = (last == ';' || last == '}');
+
+        if (!forceRun && !autoRun) continue;  // keep buffering
+
+        // ── try to compile & run session + pending ────────────────────────
+        std::string full = session + pending;
+        try {
+            runSource(full, debug);
+            session = full;   // commit: variables now persist
+            pending.clear();
+        } catch (const std::exception& e) {
+            std::string msg = e.what();
+            // Runtime errors (div/0, underflow) → discard pending, keep session
+            if (msg.rfind("Runtime", 0) == 0) {
+                std::cerr << "  Error: " << msg << "\n";
+                pending.clear();
+            }
+            // Lex/parse errors → could be incomplete input, keep buffering
+            // (user will see nothing — they can type more or use ;; to force)
         }
     }
-    std::cout << "Bye!\n";
+
+    std::cout << "\n  Goodbye!\n";
 }
 
 // ── entry point ───────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
+    // No arguments → interactive REPL
     if (argc == 1) {
-        replLoop();
+        runREPL();   // ← was wrongly called replLoop() before
         return 0;
     }
 
@@ -177,5 +194,6 @@ int main(int argc, char* argv[]) {
         std::cerr << "Usage: cvm [script.cvm] [--debug]\n";
         return 1;
     }
+
     return runFile(path, debug);
 }
