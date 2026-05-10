@@ -5,6 +5,7 @@
 #include <cctype>
 #include <cstdint>
 
+// all the token types i need - one per keyword, operator, or literal kind
 enum class TokenType {
     INT_LIT, TRUE_LIT, FALSE_LIT,
     IDENT,
@@ -16,6 +17,8 @@ enum class TokenType {
     EOF_TOK
 };
 
+// each token stores what type it is, the raw text, integer value (for INT_LIT),
+// and what line it's on (useful for error messages)
 struct Token {
     TokenType type;
     std::string text;
@@ -26,12 +29,14 @@ struct Token {
         : type(t), text(std::move(tx)), intVal(v), line(ln) {}
 };
 
+// the lexer takes the whole source as a string and produces a flat list of tokens
 class Lexer {
 public:
     explicit Lexer(std::string src) : src_(std::move(src)), pos_(0), line_(1) {}
 
     std::vector<Token> tokenize() {
         std::vector<Token> tokens;
+        // keep going until we consume the whole input
         while (true) {
             skipWhitespaceAndComments();
             if (pos_ >= src_.size()) {
@@ -55,6 +60,7 @@ private:
     size_t pos_;
     int line_;
 
+    // look ahead without consuming - offset=0 means current char
     char peek(size_t offset = 0) const {
         size_t idx = pos_ + offset;
         return (idx < src_.size()) ? src_[idx] : '\0';
@@ -62,16 +68,18 @@ private:
 
     char advance() {
         char c = src_[pos_++];
-        if (c == '\n') ++line_;
+        if (c == '\n') ++line_; // had to add this check after getting wrong line numbers
         return c;
     }
 
+    // skip blank lines, spaces, tabs, and // line comments
     void skipWhitespaceAndComments() {
         while (pos_ < src_.size()) {
             char c = src_[pos_];
             if (std::isspace(static_cast<unsigned char>(c))) {
                 advance();
             } else if (c == '/' && peek(1) == '/') {
+                // skip everything until end of line
                 while (pos_ < src_.size() && src_[pos_] != '\n')
                     ++pos_;
             } else {
@@ -80,6 +88,7 @@ private:
         }
     }
 
+    // just grab digits and parse the number
     Token readInt() {
         int startLine = line_;
         size_t start = pos_;
@@ -90,6 +99,7 @@ private:
         return Token(TokenType::INT_LIT, text, val, startLine);
     }
 
+    // read word, then check if it's a keyword or just an identifier
     Token readIdent() {
         int startLine = line_;
         size_t start = pos_;
@@ -98,6 +108,7 @@ private:
             ++pos_;
         std::string text = src_.substr(start, pos_ - start);
 
+        // keywords - not sure if there's a cleaner way but this is readable
         if (text == "let")   return Token(TokenType::LET,       text, 0, startLine);
         if (text == "if")    return Token(TokenType::IF,        text, 0, startLine);
         if (text == "else")  return Token(TokenType::ELSE,      text, 0, startLine);
@@ -110,6 +121,7 @@ private:
         return Token(TokenType::IDENT, text, 0, startLine);
     }
 
+    // handle single-char symbols and the one two-char case (==)
     Token readSymbol() {
         int startLine = line_;
         char c = advance();
@@ -125,6 +137,7 @@ private:
             case '}': return Token(TokenType::RBRACE,    "}", 0, startLine);
             case ';': return Token(TokenType::SEMICOLON, ";", 0, startLine);
             case '=':
+                // peek ahead - is it == or just =?
                 if (pos_ < src_.size() && src_[pos_] == '=') {
                     ++pos_;
                     return Token(TokenType::EQ_EQ, "==", 0, startLine);
