@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(g++ --version 2>&1)",
+      "PowerShell(Get-Command g++, clang++, cl, c++ -ErrorAction SilentlyContinue | Select-Object Name, Source; $env:PATH -split ';' | Where-Object { $_ -match 'mingw|gcc|clang|msvc|visual' })",
+      "PowerShell(Get-ChildItem \"C:\\\\Program Files\\\\Git\\\\mingw64\\\\bin\" | Where-Object { $_.Name -match 'g\\\\+\\\\+|gcc|clang' } | Select-Object Name)",
+      "PowerShell($env:PATH -split ';')",
+      "PowerShell(Get-ChildItem \"C:\\\\ProgramData\\\\chocolatey\\\\bin\" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'g\\\\+\\\\+|gcc|clang' } | Select-Object Name)",
+      "PowerShell(node --version 2>&1)",
+      "PowerShell(python --version 2>&1)",
+      "PowerShell(winget --version 2>&1)",
+      "PowerShell(choco --version 2>&1)",
+      "PowerShell(winget install --id MSYS2.MSYS2 --silent --accept-package-agreements --accept-source-agreements 2>&1)"
+    ]
+  }
+}
