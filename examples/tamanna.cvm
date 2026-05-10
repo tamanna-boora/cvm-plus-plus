@@ -1,0 +1,14 @@
+// my first program in my own language
+
+// compute sum of squares from 1 to 10
+// should print 385 (1 + 4 + 9 + 16 + 25 + 36 + 49 + 64 + 81 + 100)
+
+let sum = 0;   // accumulator starts at zero
+let i = 1;     // loop counter
+
+while (i < 11) {
+    sum = sum + i * i;  // add i squared to the total
+    i = i + 1;          // next number
+}
+
+print(sum);  // should be 385
