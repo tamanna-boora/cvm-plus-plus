@@ -4,10 +4,14 @@
 #include <stdexcept>
 #include <string>
 
+// recursive descent parser - each method handles one level of the grammar.
+// getting operator precedence right took me a while - the trick is that
+// each precedence level calls the one above it, so higher-priority stuff
+// binds tighter naturally.
 class Parser {
 public:
     explicit Parser(std::vector<Token> tokens)
-        : tokens_(std::move(tokens)), pos_(0) {}
+        : tokens_(std::move(tokens)), idx_(0) {}
 
     std::shared_ptr<ASTNode> parse() {
         auto prog = makeNode(NodeType::Program);
@@ -19,38 +23,40 @@ public:
 
 private:
     std::vector<Token> tokens_;
-    size_t pos_;
+    size_t idx_; // current position in the token list
 
-    // ── token helpers ──────────────────────────────────────────────────────
-    const Token& current() const { return tokens_[pos_]; }
+    // basic helpers for peeking at and consuming tokens
+    const Token& current() const { return tokens_[idx_]; }
 
     bool check(TokenType t) const { return current().type == t; }
 
     bool match(TokenType t) {
-        if (check(t)) { ++pos_; return true; }
+        if (check(t)) { ++idx_; return true; }
         return false;
     }
 
+    // consume expects a specific token and throws a readable error if it's wrong
     const Token& consume(TokenType t, const std::string& msg) {
         if (!check(t))
             throw std::runtime_error(msg + " at line " + std::to_string(current().line) +
                                      " (got '" + current().text + "')");
-        return tokens_[pos_++];
+        return tokens_[idx_++];
     }
 
-    // ── statements ─────────────────────────────────────────────────────────
+    // statements
     std::shared_ptr<ASTNode> parseStatement() {
-        if (check(TokenType::LET))   return parseLetDecl();
-        if (check(TokenType::IF))    return parseIf();
-        if (check(TokenType::WHILE)) return parseWhile();
-        if (check(TokenType::PRINT)) return parsePrint();
+        if (check(TokenType::LET))    return parseLetDecl();
+        if (check(TokenType::IF))     return parseIf();
+        if (check(TokenType::WHILE))  return parseWhile();
+        if (check(TokenType::PRINT))  return parsePrint();
         if (check(TokenType::LBRACE)) return parseBlock();
 
-        // assignment  or  expression statement
+        // tricky part: IDENT could be an assignment (x = ...) or just an expression
+        // so we peek one token ahead to decide
         if (check(TokenType::IDENT)) {
-            size_t saved = pos_;
-            std::string name = tokens_[pos_].text;
-            ++pos_;
+            size_t saved = idx_;
+            std::string name = tokens_[idx_].text;
+            ++idx_;
             if (match(TokenType::ASSIGN)) {
                 auto node = makeNode(NodeType::AssignStmt);
                 node->strVal = name;
@@ -58,9 +64,10 @@ private:
                 consume(TokenType::SEMICOLON, "Expected ';' after assignment");
                 return node;
             }
-            pos_ = saved; // back-track
+            idx_ = saved; // not an assignment, backtrack
         }
 
+        // otherwise it's just an expression statement (result gets popped)
         auto node = makeNode(NodeType::ExprStmt);
         node->children.push_back(parseExpr());
         consume(TokenType::SEMICOLON, "Expected ';' after expression");
@@ -98,6 +105,7 @@ private:
         node->children.push_back(cond);
         node->children.push_back(thenBranch);
 
+        // else is optional, and else-if just recurses into parseIf
         if (match(TokenType::ELSE)) {
             if (check(TokenType::IF))
                 node->children.push_back(parseIf());
@@ -130,20 +138,21 @@ private:
         return node;
     }
 
-    // ── expressions (precedence: comparison < add/sub < mul/div < unary < primary) ──
+    // expression parsing - precedence levels from lowest to highest:
+    // comparison (==, <)  ->  add/sub  ->  mul/div  ->  unary minus  ->  primary
     std::shared_ptr<ASTNode> parseExpr() { return parseComparison(); }
 
     std::shared_ptr<ASTNode> parseComparison() {
         auto left = parseAddSub();
         while (check(TokenType::EQ_EQ) || check(TokenType::LESS)) {
             std::string op = current().text;
-            ++pos_;
+            ++idx_;
             auto right = parseAddSub();
             auto node = makeNode(NodeType::BinaryExpr);
             node->strVal = op;
             node->children.push_back(left);
             node->children.push_back(right);
-            left = node;
+            left = node; // chain: a == b == c becomes left-associative
         }
         return left;
     }
@@ -152,7 +161,7 @@ private:
         auto left = parseMulDiv();
         while (check(TokenType::PLUS) || check(TokenType::MINUS)) {
             std::string op = current().text;
-            ++pos_;
+            ++idx_;
             auto right = parseMulDiv();
             auto node = makeNode(NodeType::BinaryExpr);
             node->strVal = op;
@@ -167,7 +176,7 @@ private:
         auto left = parseUnary();
         while (check(TokenType::STAR) || check(TokenType::SLASH)) {
             std::string op = current().text;
-            ++pos_;
+            ++idx_;
             auto right = parseUnary();
             auto node = makeNode(NodeType::BinaryExpr);
             node->strVal = op;
@@ -180,9 +189,9 @@ private:
 
     std::shared_ptr<ASTNode> parseUnary() {
         if (check(TokenType::MINUS)) {
-            ++pos_;
+            ++idx_;
             auto operand = parseUnary();
-            // fold into  (0 - operand)
+            // basically rewrite -x as (0 - x) so the compiler doesn't need a separate NEG opcode
             auto zero = makeNode(NodeType::IntLit);
             zero->intVal = 0;
             auto node = makeNode(NodeType::BinaryExpr);
@@ -194,33 +203,34 @@ private:
         return parsePrimary();
     }
 
+    // literals, variables, input(), and parenthesized expressions
     std::shared_ptr<ASTNode> parsePrimary() {
         if (check(TokenType::INT_LIT)) {
             auto node = makeNode(NodeType::IntLit);
             node->intVal = current().intVal;
-            ++pos_;
+            ++idx_;
             return node;
         }
         if (check(TokenType::TRUE_LIT)) {
             auto node = makeNode(NodeType::BoolLit);
             node->boolVal = true;
-            ++pos_;
+            ++idx_;
             return node;
         }
         if (check(TokenType::FALSE_LIT)) {
             auto node = makeNode(NodeType::BoolLit);
             node->boolVal = false;
-            ++pos_;
+            ++idx_;
             return node;
         }
         if (check(TokenType::IDENT)) {
             auto node = makeNode(NodeType::Variable);
             node->strVal = current().text;
-            ++pos_;
+            ++idx_;
             return node;
         }
         if (check(TokenType::INPUT)) {
-            ++pos_;
+            ++idx_;
             consume(TokenType::LPAREN, "Expected '(' after 'input'");
             consume(TokenType::RPAREN, "Expected ')' after 'input('");
             return makeNode(NodeType::InputExpr);
@@ -230,6 +240,7 @@ private:
             consume(TokenType::RPAREN, "Expected ')' after expression");
             return expr;
         }
+        // TODO: maybe handle this better later - right now just throws
         throw std::runtime_error(
             "Unexpected token '" + current().text +
             "' at line " + std::to_string(current().line));
