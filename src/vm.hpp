@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <cstdint>
 
+// a value is either an int or a bool - i use a tag to track which one
 struct Value {
     enum class Tag { INT, BOOL } tag;
     int64_t intVal  = 0;
@@ -19,27 +20,30 @@ struct Value {
         return std::to_string(intVal);
     }
 
+    // used by arithmetic ops - throws if someone tries to add a bool
     int64_t asInt(const std::string& ctx) const {
         if (tag != Tag::INT)
             throw std::runtime_error("Type error: expected int in " + ctx);
         return intVal;
     }
 
+    // basically: booleans use their value, integers treat 0 as false
     bool asBool() const {
         if (tag == Tag::BOOL) return boolVal;
         return intVal != 0;
     }
 };
 
+// the actual VM - stack-based, variables in a flat array, one big switch loop
 class VM {
 public:
-    static constexpr int MAX_VARS = 4096;
+    static constexpr int MAX_VARS = 4096; // probably more than enough for now
 
     VM() : vars_(MAX_VARS, Value::fromInt(0)) {}
 
     void run(const std::vector<Instruction>& code) {
-        stack_.clear();
-        int ip = 0;
+        stk_.clear();
+        int ip = 0; // instruction pointer
         const int limit = static_cast<int>(code.size());
 
         while (ip < limit) {
@@ -61,6 +65,7 @@ public:
                     vars_[static_cast<size_t>(instr.operand)] = pop();
                     break;
 
+                // arithmetic: pop two values, push the result
                 case OpCode::ADD: { auto b = pop(); auto a = pop();
                     push(Value::fromInt(a.asInt("ADD") + b.asInt("ADD"))); break; }
 
@@ -71,16 +76,20 @@ public:
                     push(Value::fromInt(a.asInt("MUL") * b.asInt("MUL"))); break; }
 
                 case OpCode::DIV: { auto b = pop(); auto a = pop();
+                    // had to add this check after getting a segfault... just kidding,
+                    // but division by zero would give garbage without it
                     if (b.asInt("DIV") == 0)
                         throw std::runtime_error("Division by zero");
                     push(Value::fromInt(a.asInt("DIV") / b.asInt("DIV"))); break; }
 
+                // equality compares string representations so int 1 != bool true
                 case OpCode::EQ: { auto b = pop(); auto a = pop();
                     push(Value::fromBool(a.toString() == b.toString())); break; }
 
                 case OpCode::LT: { auto b = pop(); auto a = pop();
                     push(Value::fromBool(a.asInt("LT") < b.asInt("LT"))); break; }
 
+                // jumps use continue so ip++ at the bottom doesn't happen
                 case OpCode::JMP:
                     ip = static_cast<int>(instr.operand);
                     continue;
@@ -104,7 +113,7 @@ public:
                 }
 
                 case OpCode::POP:
-                    pop();
+                    pop(); // just discard the top value
                     break;
 
                 case OpCode::HALT:
@@ -118,16 +127,16 @@ public:
     }
 
 private:
-    std::vector<Value> stack_;
-    std::vector<Value> vars_;
+    std::vector<Value> stk_;              // the value stack
+    std::vector<Value> vars_;             // variable storage, indexed by slot number
 
-    void push(Value v) { stack_.push_back(v); }
+    void push(Value v) { stk_.push_back(v); }
 
     Value pop() {
-        if (stack_.empty())
+        if (stk_.empty())
             throw std::runtime_error("Stack underflow");
-        Value v = stack_.back();
-        stack_.pop_back();
+        Value v = stk_.back();
+        stk_.pop_back();
         return v;
     }
 };
