@@ -11,7 +11,8 @@
 #include <vector>
 #include <iomanip>
 
-// ── disassembler ──────────────────────────────────────────────────────────────
+// disassembler - prints out the bytecode in a readable format
+// only used when --debug flag is passed
 static const char* opName(OpCode op) {
     switch (op) {
         case OpCode::PUSH_INT:      return "PUSH_INT";
@@ -34,6 +35,7 @@ static const char* opName(OpCode op) {
     }
 }
 
+// not all opcodes have a meaningful operand, so only print it when relevant
 static bool hasOperand(OpCode op) {
     switch (op) {
         case OpCode::PUSH_INT:
@@ -63,7 +65,7 @@ static void disassemble(const std::vector<Instruction>& code) {
     std::cout << "============================\n\n";
 }
 
-// ── run a complete source string ──────────────────────────────────────────────
+// run a source string through the full pipeline: lex -> parse -> compile -> run
 static void runSource(const std::string& src, bool debug) {
     Lexer lex(src);
     auto tokens = lex.tokenize();
@@ -80,7 +82,7 @@ static void runSource(const std::string& src, bool debug) {
     vm.run(code);
 }
 
-// ── file mode ─────────────────────────────────────────────────────────────────
+// file mode: read the whole file and run it
 static int runFile(const std::string& path, bool debug) {
     std::ifstream f(path);
     if (!f) {
@@ -98,31 +100,24 @@ static int runFile(const std::string& path, bool debug) {
     return 0;
 }
 
-// ── REPL ──────────────────────────────────────────────────────────────────────
+// interactive REPL
 static void runREPL() {
-    std::cout << R"(
- ██████╗██╗   ██╗███╗   ███╗  ██╗  ██╗
-██╔════╝██║   ██║████╗ ████║  ██║  ██║
-██║     ██║   ██║██╔████╔██║  ███████║
-██║     ╚██╗ ██╔╝██║╚██╔╝██║  ╚════██║
-╚██████╗ ╚████╔╝ ██║ ╚═╝ ██║       ██║
- ╚═════╝  ╚═══╝  ╚═╝     ╚═╝       ╚═╝
-)";
-    std::cout << "  CVM++ REPL v1.0\n";
-    std::cout << "  Commands: exit | debug | clear | ;; (force run)\n\n";
+    // simple banner - nothing fancy
+    std::cout << "\nCVM++ v1.0 - my custom language\n";
+    std::cout << "type exit to quit, debug to toggle bytecode, ;; to force run\n\n";
 
     bool        debug   = false;
     std::string line;
-    std::string session;  // ALL committed source — gives persistent variables
-    std::string pending;  // lines typed since last successful run
+    std::string session;  // accumulated source from all previous runs (gives persistent variables)
+    std::string pending;  // lines typed since last run
 
     while (true) {
         std::cout << (pending.empty() ? "cvm> " : "...  ");
         std::cout.flush();
 
-        if (!std::getline(std::cin, line)) break;  // EOF (Ctrl+D / Ctrl+Z)
+        if (!std::getline(std::cin, line)) break; // EOF
 
-        // ── built-in commands ─────────────────────────────────────────────
+        // built-in commands
         if (line == "exit" || line == "quit") break;
 
         if (line == "debug") {
@@ -132,50 +127,48 @@ static void runREPL() {
         }
 
         if (line == "clear") {
+            // reset everything - variables are gone after this
             session.clear();
             pending.clear();
             std::cout << "  [session cleared]\n";
             continue;
         }
 
-        // ── accumulate input ──────────────────────────────────────────────
         pending += line + "\n";
 
-        // Determine last non-whitespace character
+        // figure out the last non-whitespace character
         char last = '\0';
         for (char c : line) if (!std::isspace(c)) last = c;
 
         bool forceRun = (line == ";;");
         bool autoRun  = (last == ';' || last == '}');
 
-        if (!forceRun && !autoRun) continue;  // keep buffering
+        if (!forceRun && !autoRun) continue; // keep buffering, not done yet
 
-        // ── try to compile & run session + pending ────────────────────────
+        // try to compile and run session + new input together
         std::string full = session + pending;
         try {
             runSource(full, debug);
-            session = full;   // commit: variables now persist
+            session = full;  // commit: variables now persist across inputs
             pending.clear();
         } catch (const std::exception& e) {
             std::string msg = e.what();
-            // Runtime errors (div/0, underflow) → discard pending, keep session
+            // runtime errors (div by zero etc) - discard pending and report
             if (msg.rfind("Runtime", 0) == 0) {
                 std::cerr << "  Error: " << msg << "\n";
                 pending.clear();
             }
-            // Lex/parse errors → could be incomplete input, keep buffering
-            // (user will see nothing — they can type more or use ;; to force)
+            // lex/parse errors might just mean the input is incomplete, so keep buffering
+            // TODO: maybe handle this better later - distinguish real errors from incomplete input
         }
     }
 
     std::cout << "\n  Goodbye!\n";
 }
 
-// ── entry point ───────────────────────────────────────────────────────────────
 int main(int argc, char* argv[]) {
-    // No arguments → interactive REPL
     if (argc == 1) {
-        runREPL();   // ← was wrongly called replLoop() before
+        runREPL();
         return 0;
     }
 
