@@ -10,10 +10,11 @@
 enum class OpCode {
     PUSH_INT,
     PUSH_BOOL,
+    PUSH_STR,   // push a string literal onto the stack
     LOAD,       // load a variable onto the stack
     STORE,      // pop stack and save into a variable slot
-    ADD, SUB, MUL, DIV,
-    EQ, LT,
+    ADD, SUB, MUL, DIV, MOD,
+    EQ, NEQ, LT, LE, GE,
     JMP,
     JMP_IF_FALSE,
     PRINT,
@@ -22,11 +23,12 @@ enum class OpCode {
     HALT
 };
 
-// one instruction: the opcode, an optional integer operand, and a debug label
+// one instruction: the opcode, integer operand, string operand, and a debug label
 struct Instruction {
-    OpCode  op;
-    int64_t operand = 0;
-    std::string dbgName; // only used when --debug flag is on
+    OpCode      op;
+    int64_t     operand    = 0;
+    std::string dbgName;
+    std::string strOperand; // used by PUSH_STR
 };
 
 // walks the AST and emits a flat list of instructions.
@@ -45,12 +47,18 @@ public:
 
 private:
     std::vector<Instruction> code_;
-    std::unordered_map<std::string, int> vars_; // maps variable name -> slot index
+    std::unordered_map<std::string, int> vars_; // variable name -> slot index
     int numVars_ = 0; // how many variables we've declared so far
 
     // emit an instruction and return its index (needed for backpatching)
     int emit(OpCode op, int64_t operand = 0, const std::string& dbg = "") {
-        code_.push_back({op, operand, dbg});
+        code_.push_back({op, operand, dbg, ""});
+        return static_cast<int>(code_.size()) - 1;
+    }
+
+    // special emit for string literals
+    int emitStr(const std::string& s) {
+        code_.push_back({OpCode::PUSH_STR, 0, "", s});
         return static_cast<int>(code_.size()) - 1;
     }
 
@@ -91,6 +99,10 @@ private:
                      std::string("PUSH_BOOL ") + (n->boolVal ? "true" : "false"));
                 break;
 
+            case NodeType::StringLit:
+                emitStr(n->strVal);
+                break;
+
             case NodeType::Variable:
                 emit(OpCode::LOAD, varSlot(n->strVal), "LOAD " + n->strVal);
                 break;
@@ -107,8 +119,12 @@ private:
                 else if (n->strVal == "-")  emit(OpCode::SUB, 0, "SUB");
                 else if (n->strVal == "*")  emit(OpCode::MUL, 0, "MUL");
                 else if (n->strVal == "/")  emit(OpCode::DIV, 0, "DIV");
+                else if (n->strVal == "%")  emit(OpCode::MOD, 0, "MOD");
                 else if (n->strVal == "==") emit(OpCode::EQ,  0, "EQ");
+                else if (n->strVal == "!=") emit(OpCode::NEQ, 0, "NEQ");
                 else if (n->strVal == "<")  emit(OpCode::LT,  0, "LT");
+                else if (n->strVal == "<=") emit(OpCode::LE,  0, "LE");
+                else if (n->strVal == ">=") emit(OpCode::GE,  0, "GE");
                 else throw std::runtime_error("Unknown operator: " + n->strVal);
                 break;
 
@@ -139,12 +155,12 @@ private:
             case NodeType::IfStmt: {
                 // children[0]=condition, children[1]=then, children[2]=else (optional)
                 emitNode(n->children[0]);
-                int jifIdx = emit(OpCode::JMP_IF_FALSE, 0, "JMP_IF_FALSE ?"); // placeholder
+                int jifIdx = emit(OpCode::JMP_IF_FALSE, 0, "JMP_IF_FALSE ?");
 
                 emitNode(n->children[1]); // then branch
 
-                if (n->children.size() == 3) {
-                    // has else: emit a jump to skip the else, then fill in both targets
+                if (n->children.size() == 3u) {
+                    // has else: jump past else after then, then fill in targets
                     int jmpIdx = emit(OpCode::JMP, 0, "JMP ?");
                     patch(jifIdx, currentPos()); // false jumps here (start of else)
                     emitNode(n->children[2]);
@@ -157,14 +173,26 @@ private:
 
             case NodeType::WhileStmt: {
                 // children[0]=condition, children[1]=body
-                // this took me a while to get right - you have to remember where the
-                // top of the loop is so the JMP at the end can go back to it
                 int loopTop = currentPos();
                 emitNode(n->children[0]); // check condition each iteration
                 int jifIdx = emit(OpCode::JMP_IF_FALSE, 0, "JMP_IF_FALSE ?");
                 emitNode(n->children[1]); // loop body
                 emit(OpCode::JMP, loopTop, "JMP " + std::to_string(loopTop));
-                patch(jifIdx, currentPos()); // exit the loop when condition is false
+                patch(jifIdx, currentPos()); // exit when condition is false
+                break;
+            }
+
+            case NodeType::ForStmt: {
+                // children[0]=init, [1]=cond, [2]=update, [3]=body
+                // init runs once, then: check cond -> body -> update -> repeat
+                emitNode(n->children[0]); // init (runs once before the loop)
+                int loopTop = currentPos();
+                emitNode(n->children[1]); // condition check
+                int jifIdx = emit(OpCode::JMP_IF_FALSE, 0, "JMP_IF_FALSE ?");
+                emitNode(n->children[3]); // body
+                emitNode(n->children[2]); // update (runs at end of each iteration)
+                emit(OpCode::JMP, loopTop, "JMP " + std::to_string(loopTop));
+                patch(jifIdx, currentPos()); // exit when condition is false
                 break;
             }
 
