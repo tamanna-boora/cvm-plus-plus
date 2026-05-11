@@ -1,0 +1,25 @@
+// print all primes up to 50
+
+print("Prime numbers up to 50:");
+
+let n = 2;
+let d = 2;
+let is_prime = true;
+
+while (n <= 50) {
+    d = 2;
+    is_prime = true;
+
+    while (d * d <= n) {
+        if (n % d == 0) {
+            is_prime = false;
+        }
+        d = d + 1;
+    }
+
+    if (is_prime) {
+        print(n);
+    }
+
+    n = n + 1;
+}
