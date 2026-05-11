@@ -1,8 +1,0 @@
-cvm
-build/
-*.o
-*.out
-.vscode/settings.json
-.claude/
-cvm.exe
-*.exe
