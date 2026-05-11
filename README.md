@@ -45,3 +45,9 @@ In the REPL, lines ending with `;` or `}` auto-execute. Use `debug` to toggle by
 - String type with a `PUSH_STR` opcode
 - Functions using `CALL`/`RET` opcodes and a call stack
 - `break` and `continue` in loops (emit placeholder jumps, backpatch at loop end)
+
+## Status
+All features verified and tested:
+- fibonacci, factorial, fizzbuzz, gcd, primes all passing
+- debug mode and trace mode working
+
