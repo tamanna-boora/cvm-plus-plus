@@ -11,7 +11,7 @@
 #include <vector>
 #include <iomanip>
 
-// maps opcodes to their display name for the disassembler
+
 static const char* opName(OpCode op) {
     switch (op) {
         case OpCode::PUSH_INT:      return "PUSH_INT";
@@ -39,7 +39,7 @@ static const char* opName(OpCode op) {
     }
 }
 
-// true for opcodes that carry an integer operand (used to decide what to print)
+
 static bool hasIntOperand(OpCode op) {
     switch (op) {
         case OpCode::PUSH_INT:
@@ -54,7 +54,7 @@ static bool hasIntOperand(OpCode op) {
     }
 }
 
-// disassemble() - only called with --debug flag, prints each instruction
+
 static void disassemble(const std::vector<Instruction>& code) {
     std::cout << "\n=== Bytecode Disassembly ===\n";
     for (int i = 0; i < static_cast<int>(code.size()); ++i) {
@@ -62,7 +62,7 @@ static void disassemble(const std::vector<Instruction>& code) {
         std::cout << std::setw(4) << i << "  "
                   << std::left << std::setw(16) << opName(ins.op);
         if (ins.op == OpCode::PUSH_STR) {
-            // show the actual string content in quotes
+            
             std::cout << "  \"" << ins.strOperand << "\"";
         } else if (hasIntOperand(ins.op)) {
             std::cout << std::right << std::setw(6) << ins.operand;
@@ -74,7 +74,7 @@ static void disassemble(const std::vector<Instruction>& code) {
     std::cout << "============================\n\n";
 }
 
-// run a source string through the full pipeline: lex -> parse -> compile -> run
+
 static void runSource(const std::string& src, bool debug, bool trace) {
     Lexer lex(src);
     auto tokens = lex.tokenize();
@@ -91,7 +91,7 @@ static void runSource(const std::string& src, bool debug, bool trace) {
     vm.run(code, trace);
 }
 
-// file mode: read the whole file and run it
+
 static int runFile(const std::string& path, bool debug, bool trace) {
     std::ifstream f(path);
     if (!f) {
@@ -109,7 +109,7 @@ static int runFile(const std::string& path, bool debug, bool trace) {
     return 0;
 }
 
-// interactive REPL with persistent session state
+
 static void runREPL() {
     std::cout << "\nCVM++ v1.0\n";
     std::cout << "commands: exit | debug | trace | clear | ;;\n\n";
@@ -117,16 +117,16 @@ static void runREPL() {
     bool        debug   = false;
     bool        trace   = false;
     std::string line;
-    std::string session; // all committed source - gives persistent variables
-    std::string pending; // lines typed since last run
+    std::string session; 
+    std::string pending; 
 
     while (true) {
         std::cout << (pending.empty() ? "cvm> " : "...  ");
         std::cout.flush();
 
-        if (!std::getline(std::cin, line)) break; // EOF (Ctrl+D / Ctrl+Z)
+        if (!std::getline(std::cin, line)) break; 
 
-        // built-in commands
+        
         if (line == "exit" || line == "quit") break;
 
         if (line == "debug") {
@@ -150,7 +150,7 @@ static void runREPL() {
 
         pending += line + "\n";
 
-        // determine the last non-whitespace char to auto-trigger execution
+        
         char last = '\0';
         for (char c : line)
             if (!std::isspace(static_cast<unsigned char>(c))) last = c;
@@ -158,21 +158,21 @@ static void runREPL() {
         bool forceRun = (line == ";;");
         bool autoRun  = (last == ';' || last == '}');
 
-        if (!forceRun && !autoRun) continue; // keep buffering
+        if (!forceRun && !autoRun) continue; 
 
         std::string full = session + pending;
         try {
             runSource(full, debug, trace);
-            session = full; // commit: variables persist across inputs
+            session = full; 
             pending.clear();
         } catch (const std::exception& e) {
             std::string msg = e.what();
-            // runtime errors: discard pending and report immediately
+            
             if (msg.rfind("Runtime", 0) == 0) {
                 std::cerr << "  Error: " << msg << "\n";
                 pending.clear();
             }
-            // lex/parse errors might mean incomplete input - keep buffering silently
+            
         }
     }
 

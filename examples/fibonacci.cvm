@@ -1,4 +1,4 @@
-// fibonacci.cvm — print first 15 Fibonacci numbers
+
 
 let a = 0;
 let b = 1;

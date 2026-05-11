@@ -5,7 +5,7 @@
 #include <cctype>
 #include <cstdint>
 
-// all the token types i need - one per keyword, operator, or literal kind
+
 enum class TokenType {
     INT_LIT, TRUE_LIT, FALSE_LIT, STRING_LIT,
     IDENT,
@@ -17,8 +17,8 @@ enum class TokenType {
     EOF_TOK
 };
 
-// each token stores what type it is, the raw text, integer value (for INT_LIT),
-// and what line it's on (useful for error messages)
+
+
 struct Token {
     TokenType   type;
     std::string text;
@@ -29,14 +29,14 @@ struct Token {
         : type(t), text(std::move(tx)), intVal(v), line(ln) {}
 };
 
-// the lexer takes the whole source as a string and produces a flat list of tokens
+
 class Lexer {
 public:
     explicit Lexer(std::string src) : src_(std::move(src)), pos_(0), line_(1) {}
 
     std::vector<Token> tokenize() {
         std::vector<Token> tokens;
-        // keep going until we consume the whole input
+        
         while (true) {
             skipWhitespaceAndComments();
             if (pos_ >= src_.size()) {
@@ -62,7 +62,7 @@ private:
     size_t      pos_;
     int         line_;
 
-    // look ahead without consuming - offset=0 means current char
+    
     char peek(size_t offset = 0) const {
         size_t idx = pos_ + offset;
         return (idx < src_.size()) ? src_[idx] : '\0';
@@ -70,18 +70,18 @@ private:
 
     char advance() {
         char c = src_[pos_++];
-        if (c == '\n') ++line_; // track line numbers for error messages
+        if (c == '\n') ++line_; 
         return c;
     }
 
-    // skip blank lines, spaces, tabs, and // line comments
+    
     void skipWhitespaceAndComments() {
         while (pos_ < src_.size()) {
             char c = src_[pos_];
             if (std::isspace(static_cast<unsigned char>(c))) {
                 advance();
             } else if (c == '/' && peek(1) == '/') {
-                // skip everything until end of line
+                
                 while (pos_ < src_.size() && src_[pos_] != '\n')
                     ++pos_;
             } else {
@@ -90,7 +90,7 @@ private:
         }
     }
 
-    // just grab digits and parse the number
+    
     Token readInt() {
         int    startLine = line_;
         size_t start     = pos_;
@@ -101,10 +101,10 @@ private:
         return Token(TokenType::INT_LIT, text, val, startLine);
     }
 
-    // read a quoted string, handling escape sequences
+    
     Token readString() {
         int startLine = line_;
-        ++pos_; // skip opening "
+        ++pos_; 
         std::string result;
         while (pos_ < src_.size() && src_[pos_] != '"') {
             if (src_[pos_] == '\n') {
@@ -134,11 +134,11 @@ private:
         if (pos_ >= src_.size())
             throw std::runtime_error(
                 "Unterminated string at line " + std::to_string(startLine));
-        ++pos_; // skip closing "
+        ++pos_; 
         return Token(TokenType::STRING_LIT, result, 0, startLine);
     }
 
-    // read word, then check if it's a keyword or just an identifier
+    
     Token readIdent() {
         int    startLine = line_;
         size_t start     = pos_;
@@ -147,7 +147,7 @@ private:
             ++pos_;
         std::string text = src_.substr(start, pos_ - start);
 
-        // keywords
+        
         if (text == "let")   return Token(TokenType::LET,       text, 0, startLine);
         if (text == "if")    return Token(TokenType::IF,        text, 0, startLine);
         if (text == "else")  return Token(TokenType::ELSE,      text, 0, startLine);
@@ -161,7 +161,7 @@ private:
         return Token(TokenType::IDENT, text, 0, startLine);
     }
 
-    // handle single-char and two-char symbols
+    
     Token readSymbol() {
         int  startLine = line_;
         char c         = advance();

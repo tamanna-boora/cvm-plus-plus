@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <cstdint>
 
-// a value is an int, bool, or string - tag tracks which one
+
 struct Value {
     enum class Tag { INT, BOOL, STR } tag;
     int64_t     intVal  = 0;
@@ -27,7 +27,7 @@ struct Value {
         return "";
     }
 
-    // isTruthy: ints are truthy if nonzero, bools if true, strings if non-empty
+    
     bool isTruthy() const {
         switch (tag) {
             case Tag::INT:  return intVal != 0;
@@ -37,17 +37,17 @@ struct Value {
         return false;
     }
 
-    // asBool delegates to isTruthy
+    
     bool asBool() const { return isTruthy(); }
 
-    // used by arithmetic ops - throws if someone tries to do math on a string/bool
+    
     int64_t asInt(const std::string& ctx) const {
         if (tag != Tag::INT)
             throw std::runtime_error("Type error: expected int in " + ctx);
         return intVal;
     }
 
-    // strict equality: tags must match, then values must match
+    
     bool equals(const Value& other) const {
         if (tag != other.tag) return false;
         switch (tag) {
@@ -59,14 +59,14 @@ struct Value {
     }
 };
 
-// the actual VM - stack-based, variables in a flat array, one big switch loop
+
 class VM {
 public:
-    static constexpr int MAX_VARS = 4096; // probably more than enough for now
+    static constexpr int MAX_VARS = 4096; 
 
     VM() : vars_(MAX_VARS, Value::fromInt(0)) {}
 
-    // trace=true prints each instruction before executing it (useful for debugging)
+    
     void run(const std::vector<Instruction>& code, bool trace = false) {
         stk_.clear();
         int       ip    = 0;
@@ -106,7 +106,7 @@ public:
                     vars_[static_cast<size_t>(ins.operand)] = pop();
                     break;
 
-                // arithmetic: pop two values, push the result
+                
                 case OpCode::ADD: { auto b = pop(); auto a = pop();
                     push(Value::fromInt(a.asInt("ADD") + b.asInt("ADD"))); break; }
 
@@ -141,7 +141,7 @@ public:
                 case OpCode::GE: { auto b = pop(); auto a = pop();
                     push(Value::fromBool(a.asInt("GE") >= b.asInt("GE"))); break; }
 
-                // jumps use continue so ip++ at the bottom doesn't happen
+                
                 case OpCode::JMP:
                     ip = static_cast<int>(ins.operand);
                     continue;
@@ -165,7 +165,7 @@ public:
                 }
 
                 case OpCode::POP:
-                    pop(); // just discard the top value
+                    pop(); 
                     break;
 
                 case OpCode::HALT:
@@ -179,8 +179,8 @@ public:
     }
 
 private:
-    std::vector<Value> stk_;  // the value stack
-    std::vector<Value> vars_; // variable storage, indexed by slot number
+    std::vector<Value> stk_;  
+    std::vector<Value> vars_; 
 
     void push(Value v) { stk_.push_back(v); }
 
@@ -192,7 +192,7 @@ private:
         return v;
     }
 
-    // opcode name for trace output
+    
     static const char* opcodeName(OpCode op) {
         switch (op) {
             case OpCode::PUSH_INT:      return "PUSH_INT";
@@ -220,7 +220,7 @@ private:
         }
     }
 
-    // whether this opcode has a meaningful integer operand (for trace display)
+    
     static bool hasIntOperand(OpCode op) {
         switch (op) {
             case OpCode::PUSH_INT:

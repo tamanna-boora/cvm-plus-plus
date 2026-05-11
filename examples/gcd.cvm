@@ -1,4 +1,4 @@
-// greatest common divisor - Euclidean algorithm
+
 
 let a = 48;
 let b = 18;

@@ -1,4 +1,4 @@
-// test each new feature one by one
+
 
 print("testing !=");
 print(1 != 2);

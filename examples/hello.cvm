@@ -1,4 +1,4 @@
-// hello.cvm — print literals and a variable
+
 
 let greeting = 42;
 print(greeting);

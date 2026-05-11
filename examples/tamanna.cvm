@@ -1,4 +1,4 @@
-// my first program in my own language :)
+
 
 print("Sum of squares from 1 to 10:");
 
@@ -6,7 +6,7 @@ let sum = 0;
 let i = 1;
 
 while (i <= 10) {
-    sum = sum + i * i;  // add i squared each time
+    sum = sum + i * i;  
     i = i + 1;
 }
 
