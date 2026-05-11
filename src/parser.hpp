@@ -30,6 +30,11 @@ private:
 
     bool check(TokenType t) const { return current().type == t; }
 
+    // look one token ahead without consuming
+    bool checkNext(TokenType t) const {
+        return (idx_ + 1 < tokens_.size()) && (tokens_[idx_ + 1].type == t);
+    }
+
     bool match(TokenType t) {
         if (check(t)) { ++idx_; return true; }
         return false;
@@ -48,23 +53,20 @@ private:
         if (check(TokenType::LET))    return parseLetDecl();
         if (check(TokenType::IF))     return parseIf();
         if (check(TokenType::WHILE))  return parseWhile();
+        if (check(TokenType::FOR))    return parseFor();
         if (check(TokenType::PRINT))  return parsePrint();
         if (check(TokenType::LBRACE)) return parseBlock();
 
         // tricky part: IDENT could be an assignment (x = ...) or just an expression
         // so we peek one token ahead to decide
-        if (check(TokenType::IDENT)) {
-            size_t saved = idx_;
+        if (check(TokenType::IDENT) && checkNext(TokenType::ASSIGN)) {
             std::string name = tokens_[idx_].text;
-            ++idx_;
-            if (match(TokenType::ASSIGN)) {
-                auto node = makeNode(NodeType::AssignStmt);
-                node->strVal = name;
-                node->children.push_back(parseExpr());
-                consume(TokenType::SEMICOLON, "Expected ';' after assignment");
-                return node;
-            }
-            idx_ = saved; // not an assignment, backtrack
+            idx_ += 2; // consume ident and =
+            auto node = makeNode(NodeType::AssignStmt);
+            node->strVal = name;
+            node->children.push_back(parseExpr());
+            consume(TokenType::SEMICOLON, "Expected ';' after assignment");
+            return node;
         }
 
         // otherwise it's just an expression statement (result gets popped)
@@ -128,6 +130,68 @@ private:
         return node;
     }
 
+    // for (init; cond; update) { body }
+    // children layout: [0]=init, [1]=cond, [2]=update, [3]=body
+    std::shared_ptr<ASTNode> parseFor() {
+        consume(TokenType::FOR, "Expected 'for'");
+        consume(TokenType::LPAREN, "Expected '(' after 'for'");
+
+        // init: let decl or assignment/expr - both consume their trailing semicolon
+        std::shared_ptr<ASTNode> init;
+        if (check(TokenType::LET)) {
+            init = parseLetDecl();
+        } else {
+            init = parseExprOrAssignWithSemi();
+        }
+
+        // condition expression then semicolon
+        auto cond = parseExpr();
+        consume(TokenType::SEMICOLON, "Expected ';' after for condition");
+
+        // update: assignment without trailing semicolon, or expression
+        // (no semicolon because ) comes right after)
+        std::shared_ptr<ASTNode> update;
+        if (check(TokenType::IDENT) && checkNext(TokenType::ASSIGN)) {
+            std::string name = tokens_[idx_].text;
+            idx_ += 2; // consume ident and =
+            auto upd = makeNode(NodeType::AssignStmt);
+            upd->strVal = name;
+            upd->children.push_back(parseExpr());
+            update = upd;
+        } else {
+            auto upd = makeNode(NodeType::ExprStmt);
+            upd->children.push_back(parseExpr());
+            update = upd;
+        }
+
+        consume(TokenType::RPAREN, "Expected ')' after for update");
+        auto body = parseBlock();
+
+        auto node = makeNode(NodeType::ForStmt);
+        node->children.push_back(init);    // [0] init
+        node->children.push_back(cond);    // [1] condition
+        node->children.push_back(update);  // [2] update
+        node->children.push_back(body);    // [3] body
+        return node;
+    }
+
+    // helper for for-init: parses `x = expr;` or `expr;` (with semicolon)
+    std::shared_ptr<ASTNode> parseExprOrAssignWithSemi() {
+        if (check(TokenType::IDENT) && checkNext(TokenType::ASSIGN)) {
+            std::string name = tokens_[idx_].text;
+            idx_ += 2;
+            auto node = makeNode(NodeType::AssignStmt);
+            node->strVal = name;
+            node->children.push_back(parseExpr());
+            consume(TokenType::SEMICOLON, "Expected ';' in for-init");
+            return node;
+        }
+        auto node = makeNode(NodeType::ExprStmt);
+        node->children.push_back(parseExpr());
+        consume(TokenType::SEMICOLON, "Expected ';' in for-init");
+        return node;
+    }
+
     std::shared_ptr<ASTNode> parsePrint() {
         consume(TokenType::PRINT, "Expected 'print'");
         consume(TokenType::LPAREN, "Expected '(' after 'print'");
@@ -139,20 +203,23 @@ private:
     }
 
     // expression parsing - precedence levels from lowest to highest:
-    // comparison (==, <)  ->  add/sub  ->  mul/div  ->  unary minus  ->  primary
+    // comparison (==, !=, <, <=, >=)  ->  add/sub  ->  mul/div/mod  ->  unary minus  ->  primary
     std::shared_ptr<ASTNode> parseExpr() { return parseComparison(); }
 
     std::shared_ptr<ASTNode> parseComparison() {
         auto left = parseAddSub();
-        while (check(TokenType::EQ_EQ) || check(TokenType::LESS)) {
+        while (check(TokenType::EQ_EQ) || check(TokenType::NEQ) ||
+               check(TokenType::LESS)  || check(TokenType::LESS_EQ) ||
+               check(TokenType::GREATER_EQ))
+        {
             std::string op = current().text;
             ++idx_;
             auto right = parseAddSub();
-            auto node = makeNode(NodeType::BinaryExpr);
+            auto node  = makeNode(NodeType::BinaryExpr);
             node->strVal = op;
             node->children.push_back(left);
             node->children.push_back(right);
-            left = node; // chain: a == b == c becomes left-associative
+            left = node;
         }
         return left;
     }
@@ -163,7 +230,7 @@ private:
             std::string op = current().text;
             ++idx_;
             auto right = parseMulDiv();
-            auto node = makeNode(NodeType::BinaryExpr);
+            auto node  = makeNode(NodeType::BinaryExpr);
             node->strVal = op;
             node->children.push_back(left);
             node->children.push_back(right);
@@ -174,11 +241,11 @@ private:
 
     std::shared_ptr<ASTNode> parseMulDiv() {
         auto left = parseUnary();
-        while (check(TokenType::STAR) || check(TokenType::SLASH)) {
+        while (check(TokenType::STAR) || check(TokenType::SLASH) || check(TokenType::PERCENT)) {
             std::string op = current().text;
             ++idx_;
             auto right = parseUnary();
-            auto node = makeNode(NodeType::BinaryExpr);
+            auto node  = makeNode(NodeType::BinaryExpr);
             node->strVal = op;
             node->children.push_back(left);
             node->children.push_back(right);
@@ -191,7 +258,7 @@ private:
         if (check(TokenType::MINUS)) {
             ++idx_;
             auto operand = parseUnary();
-            // basically rewrite -x as (0 - x) so the compiler doesn't need a separate NEG opcode
+            // rewrite -x as (0 - x) so the compiler doesn't need a separate NEG opcode
             auto zero = makeNode(NodeType::IntLit);
             zero->intVal = 0;
             auto node = makeNode(NodeType::BinaryExpr);
@@ -220,6 +287,12 @@ private:
         if (check(TokenType::FALSE_LIT)) {
             auto node = makeNode(NodeType::BoolLit);
             node->boolVal = false;
+            ++idx_;
+            return node;
+        }
+        if (check(TokenType::STRING_LIT)) {
+            auto node = makeNode(NodeType::StringLit);
+            node->strVal = current().text; // text holds the string content
             ++idx_;
             return node;
         }
