@@ -1,53 +1,102 @@
 # CVM++
 
-A tiny programming language I built from scratch in C++17 for the IIT Guwahati Coding Club Even Semester Project. It has a lexer, a recursive-descent parser, a bytecode compiler, and a stack-based virtual machine — all header-only, no external dependencies.
+A small programming language I built in C++17. It has a lexer, a 
+parser, a compiler, and a virtual machine. No external libraries. 
+You write code in .cvm files and run them with ./cvm.
+
+---
 
 ## How it works
 
-You write `.cvm` files. The lexer turns them into tokens, the parser builds an AST, the compiler walks the tree and emits bytecode, and the VM executes it on a stack. Variables live in a flat array of 4096 slots indexed by integers (names are resolved at compile time).
+The code goes through four steps:
 
-Supported: integers, booleans (`true`/`false`), `+` `-` `*` `/` `==` `<`, `let`, `if/else`, `while`, `print()`, `input()`, and `//` comments.
+**Lexer** — reads the source text and breaks it into tokens. A token 
+is a single meaningful piece like a number, a keyword, or an operator.
+
+**Parser** — takes the tokens and builds a tree that represents the 
+structure of the program. I used recursive descent, where each grammar 
+rule is its own function. Operator precedence is handled by the order 
+in which these functions call each other.
+
+**Compiler** — walks the tree and produces a list of bytecode 
+instructions. The tricky part was compiling loops. When you emit a 
+jump instruction, you do not know the target address yet because the 
+loop body has not been compiled. The fix is to write a placeholder, 
+compile the body, then go back and fill in the real address. This is 
+called backpatching.
+
+**VM** — executes the bytecode on a stack. Each instruction pushes or 
+pops values. Variables are stored in a flat array of 4096 slots, with 
+names mapped to slot numbers at compile time.
+
+---
+
+## What the language supports
+
+- integers, booleans, strings
+- operators: + - * / %
+- comparisons: == != < <= >=
+- let, if, else, while, for
+- print() and input()
+- single line comments with //
+
+---
 
 ## Build
 
-You need g++ with C++17 support. On Windows I used MSYS2 + ucrt64.
-
 ```bash
-# with make (add C:\msys64\ucrt64\bin to PATH first on Windows)
-make
-
-# or just directly
-g++ -std=c++17 -Wall -Wextra -O2 -I src -o cvm src/main.cpp
+g++ -std=c++17 -I src -o cvm src/main.cpp
 ```
 
-## Run
+Tested on Windows with MSYS2 ucrt64.
+
+---
+
+## Usage
 
 ```bash
-./cvm examples/hello.cvm
-./cvm examples/fibonacci.cvm --debug   # shows bytecode before running
-./cvm                                   # starts the interactive REPL
+./cvm script.cvm           
+./cvm script.cvm --debug   
+./cvm script.cvm --trace   
+./cvm                      
 ```
 
-In the REPL, lines ending with `;` or `}` auto-execute. Use `debug` to toggle bytecode, `;;` to force-run the buffer, `clear` to wipe the session, `exit` to quit. Variables persist across lines within the same session.
+--debug prints the compiled bytecode before running.
+--trace prints each instruction as the VM executes it.
+The REPL keeps variables alive between lines.
 
-## What I learned
+---
 
-**Backpatching** was the hardest part. When you're compiling a `while` loop, you emit the condition check and then a `JMP_IF_FALSE` — but you don't know where to jump yet because the body hasn't been compiled. So you emit a placeholder `0`, compile the body, then go back and overwrite the `0` with the real address. I spent a long time confused about why loops were jumping to wrong places before this clicked.
+## Examples
+fibonacci.cvm   first 15 Fibonacci numbers
+factorial.cvm   10 factorial = 3628800
+fizzbuzz.cvm    FizzBuzz using %
+gcd.cvm         GCD of 48 and 18 = 6
+primes.cvm      all primes up to 50
+for_loop.cvm    squares 1 to 5 using for
+for_sum.cvm     sum 1 to 100 = 5050
+tamanna.cvm     sum of squares 1 to 10 = 385
 
-**REPL persistent state** was also tricky. The naive approach re-runs everything from scratch each time, which means variables disappear between inputs. My fix is to keep a `session` string of all previously committed source. On each run, I prepend that to the new input and run the whole thing. A bit wasteful but it works.
+---
 
-**Operator precedence** took a few tries to get right. The key insight is that each precedence level is its own function — `parseExpr` calls `parseComparison`, which calls `parseAddSub`, which calls `parseMulDiv`, and so on. Lower levels call higher ones, so higher-priority operators bind more tightly. Once I saw why that works, the rest was straightforward.
+## What I found difficult
 
-## Possible extensions
+**Backpatching** — loops need a jump instruction whose target is not 
+known yet. I emit a zero, compile the body, then patch the address 
+once I know it.
 
-- `>=` and `!=` operators (just add tokens and opcodes)
-- `%` modulo
-- String type with a `PUSH_STR` opcode
-- Functions using `CALL`/`RET` opcodes and a call stack
-- `break` and `continue` in loops (emit placeholder jumps, backpatch at loop end)
+**REPL state** — the first version forgot all variables between inputs. 
+I fixed this by storing all previously run source in a string and 
+recompiling everything from scratch on each new input.
 
-## Status
-All features verified and tested:
-- fibonacci, factorial, fizzbuzz, gcd, primes all passing
-- debug mode and trace mode working
+**Operator precedence** — each precedence level is its own parsing 
+function that calls the next one. Lower priority operators sit at the 
+top, higher priority ones go deeper.
 
+---
+
+## Possible additions
+
+- functions with their own call stack
+- arrays
+- break and continue in loops
