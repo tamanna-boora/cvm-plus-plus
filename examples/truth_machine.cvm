@@ -1,0 +1,9 @@
+let n = input();
+if (n == 0) {
+    print(0);
+}
+if (n == 1) {
+    while (1 == 1) {
+        print(1);
+    }
+}

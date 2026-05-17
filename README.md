@@ -101,3 +101,9 @@ top, higher priority ones go deeper.
 - functions with their own call stack
 - arrays
 - break and continue in loops
+
+**Demo Video**: https://drive.google.com/file/d/1dis9RVYN5erY9_Ej285-DO9OVUg3Eqbl/view?usp=drive_link
+
+**Report PDF**: https://drive.google.com/file/d/1xrxOuaHvMdJ_eF3d96D_HA9waAopyaO0/view?usp=sharing
+
+ CVM++ — IIT Guwahati — Coding Club Even Semester Project’26

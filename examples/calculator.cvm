@@ -1,0 +1,7 @@
+let a = input();
+let b = input();
+print(a + b);
+print(a - b);
+print(a * b);
+print(a / b);
+print(a % b);
