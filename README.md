@@ -68,6 +68,7 @@ The REPL keeps variables alive between lines.
 ---
 
 ## Examples
+```
 fibonacci.cvm   first 15 Fibonacci numbers
 factorial.cvm   10 factorial = 3628800
 fizzbuzz.cvm    FizzBuzz using %
@@ -76,7 +77,7 @@ primes.cvm      all primes up to 50
 for_loop.cvm    squares 1 to 5 using for
 for_sum.cvm     sum 1 to 100 = 5050
 tamanna.cvm     sum of squares 1 to 10 = 385
-
+```
 ---
 
 ## What I found difficult
